@@ -2,6 +2,7 @@ const jwt = require('jsonwebtoken');
 const User = require('./../model/userModel');
 const AppError = require('./../utils/appError');
 const sendEmail = require('./../utils/email');
+const catchAsync = require('./../utils/catchAsync');
 
 const signToken = (id) => {
   return jwt.sign({ id }, process.env.JWT_SECRET, {
@@ -9,59 +10,46 @@ const signToken = (id) => {
   });
 };
 
-exports.signup = async (req, res, next) => {
-  try {
-    const newUser = await User.create(req.body);
+exports.signup = catchAsync(async (req, res, next) => {
+  const newUser = await User.create(req.body);
 
-    const token = signToken(newUser._id);
-    res.status(201).json({
-      token,
-      status: 'success',
-      data: {
-        user: newUser,
-      },
-    });
-  } catch (err) {
-    res.status(400).json({
-      status: 'fail',
-      message: err,
-    });
-  }
-};
+  const token = signToken(newUser._id);
+  res.status(201).json({
+    token,
+    status: 'success',
+    data: {
+      user: newUser,
+    },
+  });
+});
 
-exports.login = async (req, res, next) => {
+exports.login = catchAsync(async (req, res, next) => {
   const { email, password } = req.body;
 
   //1) Check if email and pasword exist
   if (!email || !password) {
-    return res.status(400).json({
-      status: 'fail',
-      message: 'Please provide email and password',
-    });
+    return next(new AppError('Please provide email and password', 400));
   }
+
   //2) Check if user exists && password exist
   const user = await User.findOne({ email }).select('+password');
   if (!user || !(await user.correctPassword(password, user.password))) {
-    return res.status(400).json({
-      status: 'fail',
-      message: 'Incorrect email or password',
-    });
+    return next(new AppError('Incorrect email or password', 400));
   }
+
   //3) If everyone ok, send token to the client
   const token = signToken(user._id);
   return res.status(200).json({
     status: 'success',
     token,
   });
-};
+});
 
-exports.forgotPassword = async (req, res, next) => {
+exports.forgotPassword = catchAsync(async (req, res, next) => {
   //1) Get user based on  POSTed email
   const user = await User.findOne({ email: req.body.email });
   if (!user) {
-    return res.status(400).json({
-      message: 'There is no user with this email address',
-    });
+    return next(new AppError('There is no user with this email address', 400));
   }
 
   //2) Generate the random reset token
@@ -96,6 +84,6 @@ exports.forgotPassword = async (req, res, next) => {
       message: 'There was an error sending the email. Try again later!',
     });
   }
-};
+});
 
 exports.resetPassword = (req, res, next) => {};
